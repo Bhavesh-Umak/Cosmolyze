@@ -1714,6 +1714,60 @@
         </div>
     </div>
 
+    <!-- ── Live Laptop/Webcam Capture Modal ── -->
+    <div id="live-camera-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-surface-container-lowest dark:bg-surface-dim rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-outline-variant/30 flex flex-col relative">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-outline-variant/20 bg-surface-container/60">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-primary dark:text-primary-fixed text-2xl animate-pulse">photo_camera</span>
+                    <div>
+                        <h3 class="font-headline-md font-bold text-on-surface text-base">Live Camera Scan</h3>
+                        <p class="text-xs text-on-surface-variant">Position your face inside the target frame</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeLiveCamera()" class="p-1.5 rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-error" title="Close Camera">
+                    <span class="material-symbols-outlined text-xl">close</span>
+                </button>
+            </div>
+
+            <!-- Viewport & Video Feed -->
+            <div class="relative bg-black aspect-[4/3] w-full flex items-center justify-center overflow-hidden">
+                <video id="live-camera-stream" autoplay playsinline class="w-full h-full object-cover scale-x-[-1]"></video>
+                <canvas id="live-camera-canvas" class="hidden"></canvas>
+                
+                <!-- Face Guide Overlay (Target Oval + Scanner Line) -->
+                <div class="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                    <div class="w-52 h-72 border-2 border-dashed border-primary-fixed rounded-[50%] shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] relative overflow-hidden">
+                        <div class="mesh-line opacity-75"></div>
+                    </div>
+                    <div class="absolute bottom-3 bg-black/70 backdrop-blur-md text-white text-xs px-3.5 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span>Camera Active — Hold steady</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capture & Action Controls -->
+            <div class="px-6 py-4 bg-surface-container-low dark:bg-surface-container flex items-center justify-between">
+                <button type="button" onclick="closeLiveCamera(); triggerGallery();" class="text-xs flex flex-col items-center gap-1 text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors">
+                    <span class="material-symbols-outlined text-2xl">photo_library</span>
+                    <span class="font-medium">Gallery</span>
+                </button>
+
+                <!-- Shutter Trigger Button -->
+                <button type="button" id="btn-shutter-capture" onclick="captureLivePhoto()" class="w-16 h-16 rounded-full bg-primary text-on-primary shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center border-4 border-surface-container-lowest dark:border-surface-dim hover:bg-primary/90" title="Take Photo">
+                    <span class="material-symbols-outlined text-3xl">camera</span>
+                </button>
+
+                <button type="button" onclick="closeLiveCamera()" class="text-xs flex flex-col items-center gap-1 text-on-surface-variant hover:text-error transition-colors">
+                    <span class="material-symbols-outlined text-2xl">cancel</span>
+                    <span class="font-medium">Cancel</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── Hidden File Inputs (Camera & Gallery) ── -->
     <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;" />
     <input type="file" id="gallery-input" accept="image/*" style="display:none;" />
@@ -1887,7 +1941,7 @@
             const intent = sessionStorage.getItem('postLoginIntent');
             if (intent && localStorage.getItem('token')) {
                 sessionStorage.removeItem('postLoginIntent');
-                if (intent === 'camera') document.getElementById('camera-input').click();
+                if (intent === 'camera') startLiveCamera();
                 else if (intent === 'gallery') document.getElementById('gallery-input').click();
             }
         }
@@ -2282,9 +2336,85 @@
             return canvas.toDataURL('image/jpeg', 0.8);
         }
 
+        let liveCameraStream = null;
+
+        async function startLiveCamera() {
+            const modal = document.getElementById('live-camera-modal');
+            const video = document.getElementById('live-camera-stream');
+            
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    modal.classList.remove('hidden');
+                    
+                    // Request webcam stream
+                    liveCameraStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 1280 },
+                            height: { ideal: 960 }
+                        },
+                        audio: false
+                    });
+                    
+                    video.srcObject = liveCameraStream;
+                    await video.play();
+                } else {
+                    // Fallback to file picker if getUserMedia is not supported
+                    document.getElementById('camera-input').click();
+                }
+            } catch (err) {
+                console.warn('[Camera] Direct webcam access failed or denied:', err);
+                if (modal) modal.classList.add('hidden');
+                showToast('Camera permission denied or camera unavailable. Opening file selector...', 'info');
+                document.getElementById('camera-input').click();
+            }
+        }
+
+        function closeLiveCamera() {
+            const modal = document.getElementById('live-camera-modal');
+            if (modal) modal.classList.add('hidden');
+            if (liveCameraStream) {
+                liveCameraStream.getTracks().forEach(track => track.stop());
+                liveCameraStream = null;
+            }
+        }
+
+        function captureLivePhoto() {
+            const video = document.getElementById('live-camera-stream');
+            const canvas = document.getElementById('live-camera-canvas');
+            if (!video || !canvas) return;
+
+            const w = video.videoWidth || 640;
+            const h = video.videoHeight || 480;
+            canvas.width = w;
+            canvas.height = h;
+            
+            const ctx = canvas.getContext('2d');
+            // Mirror image horizontally to match live selfie viewfinder
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, w, h);
+
+            const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+            closeLiveCamera();
+
+            // Feed captured photo to questionnaire state
+            questionnaireData.originalImageBase64 = base64Image;
+            questionnaireData.imageBase64 = base64Image;
+            questionnaireData.faceReport = null;
+            questionnaireData.answers = ['', '', '', ''];
+            questionnaireData.detected_concerns = [];
+            currentDiagnosisStep = 1;
+
+            const img = document.getElementById('preview-scan-img');
+            if (img) img.src = base64Image;
+            switchView('state-preview');
+            showToast('Live photo captured! Review your scan.', 'success');
+        }
+
         function triggerCamera() {
             if (localStorage.getItem('token')) {
-                document.getElementById('camera-input').click();
+                startLiveCamera();
             } else {
                 sessionStorage.setItem('postLoginIntent', 'camera');
                 openAuthModal();
