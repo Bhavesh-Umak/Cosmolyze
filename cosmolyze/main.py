@@ -2,7 +2,14 @@
 main.py — Cosmolyze AI Vision & Dermatology Platform (FastAPI Backend)
 """
 
+import sys
 import os
+
+# Ensure current and parent directories are in sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +25,16 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await connect_to_mongo()
+    try:
+        await connect_to_mongo()
+    except Exception as e:
+        print(f"[Warning] MongoDB connection startup notice: {e}")
     yield
     # Shutdown
-    await close_mongo_connection()
+    try:
+        await close_mongo_connection()
+    except Exception:
+        pass
 
 app = FastAPI(
     title="Cosmolyze AI API",
@@ -55,7 +68,6 @@ async def api_health():
     }
 
 # ── Mount Static Images ──────────────────────────────────────────────────────
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 images_dir = os.path.join(CURRENT_DIR, "images")
 if os.path.exists(images_dir):
     app.mount("/images", StaticFiles(directory=images_dir), name="images")

@@ -3,16 +3,16 @@ schemas.py — Pydantic Schemas for Cosmolyze API
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 # ── Auth Schemas ──────────────────────────────────────────
 class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2)
-    email: EmailStr
+    email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=6)
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=3)
     password: str
 
 # ── AI Schemas ────────────────────────────────────────────
