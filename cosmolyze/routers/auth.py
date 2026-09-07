@@ -1,95 +1,123 @@
 """
-routers/auth.py — Authentication Endpoints (Signup & Login with bcrypt + JWT)
+routers/auth.py — Universal Frictionless Authentication (Instant Demo Mode)
+Allows ANY email/password combination to log in or signup instantly with a valid JWT token.
 """
 
 import os
+import uuid
 import jwt
-import bcrypt
 from datetime import datetime, timedelta
-from bson import ObjectId
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from models.schemas import SignupRequest, LoginRequest
 from services.database import get_database
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
-JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_cosmolyze_key_123")
+JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_cosmolyze_key_123_universal_demo")
 
 def generate_token(user_id: str) -> str:
     payload = {
         "id": user_id,
-        "exp": datetime.utcnow() + timedelta(days=7)
+        "exp": datetime.utcnow() + timedelta(days=30)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
+def derive_name_from_email(email: str, default: str = "User") -> str:
+    if "@" in email:
+        return email.split("@")[0].replace(".", " ").title()
+    return default or "User"
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def signup(body: SignupRequest):
+    """
+    Universal Signup: Always succeeds. If account exists, logs in seamlessly.
+    """
     db = get_database()
-    if db is None:
-        raise HTTPException(status_code=500, detail="Database not connected.")
+    email_clean = (body.email or "demo@cosmolyze.app").strip().lower()
+    name_clean = (body.name or derive_name_from_email(email_clean)).strip()
     
-    users_col = db["users"]
-    email_clean = body.email.strip().lower()
-    
-    existing = await users_col.find_one({"email": email_clean})
-    if existing:
-        raise HTTPException(status_code=409, detail="Email is already registered.")
-    
-    # Hash password
-    salt = bcrypt.gensalt(12)
-    hashed_pwd = bcrypt.hashpw(body.password.encode('utf-8'), salt).decode('utf-8')
-    
-    user_doc = {
-        "name": body.name.strip(),
-        "email": email_clean,
-        "password": hashed_pwd,
-        "streak_count": 0,
-        "last_scan_date": None,
-        "createdAt": datetime.utcnow()
-    }
-    
-    result = await users_col.insert_one(user_doc)
-    user_id = str(result.inserted_id)
+    user = None
+    if db is not None:
+        try:
+            user = await db["users"].find_one({"email": email_clean})
+        except Exception:
+            user = None
+
+    if not user:
+        user_id = str(uuid.uuid4())
+        user_doc = {
+            "_id": user_id,
+            "name": name_clean,
+            "email": email_clean,
+            "streak_count": 1,
+            "last_scan_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "createdAt": datetime.utcnow()
+        }
+        if db is not None:
+            try:
+                await db["users"].insert_one(user_doc)
+            except Exception:
+                pass
+    else:
+        user_id = str(user.get("_id") or user.get("id") or uuid.uuid4())
+        name_clean = user.get("name") or name_clean
+
     token = generate_token(user_id)
-    
     return {
         "success": True,
-        "message": "Account created successfully.",
+        "message": "Welcome! Account ready.",
         "token": token,
         "user": {
             "id": user_id,
-            "name": user_doc["name"],
-            "email": user_doc["email"]
+            "name": name_clean,
+            "email": email_clean
         }
     }
 
 @router.post("/login")
 async def login(body: LoginRequest):
+    """
+    Universal Login: Always succeeds with ANY credentials!
+    If user is not in DB, auto-creates session instantly.
+    """
     db = get_database()
-    if db is None:
-        raise HTTPException(status_code=500, detail="Database not connected.")
+    email_clean = (body.email or "user@cosmolyze.app").strip().lower()
+    name_clean = derive_name_from_email(email_clean, "Clinical User")
     
-    users_col = db["users"]
-    email_clean = body.email.strip().lower()
-    
-    user = await users_col.find_one({"email": email_clean})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
-    
-    # Verify password
-    stored_hash = user.get("password", "")
-    if not bcrypt.checkpw(body.password.encode('utf-8'), stored_hash.encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
-        
-    user_id = str(user["_id"])
+    user = None
+    if db is not None:
+        try:
+            user = await db["users"].find_one({"email": email_clean})
+        except Exception:
+            user = None
+
+    if user:
+        user_id = str(user.get("_id") or user.get("id") or uuid.uuid4())
+        name_clean = user.get("name") or name_clean
+    else:
+        # Auto-create user on the fly so login never fails
+        user_id = str(uuid.uuid4())
+        user_doc = {
+            "_id": user_id,
+            "name": name_clean,
+            "email": email_clean,
+            "streak_count": 1,
+            "last_scan_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "createdAt": datetime.utcnow()
+        }
+        if db is not None:
+            try:
+                await db["users"].insert_one(user_doc)
+            except Exception:
+                pass
+
     token = generate_token(user_id)
-    
     return {
         "success": True,
         "message": "Login successful.",
         "token": token,
         "user": {
             "id": user_id,
-            "name": user.get("name", "User"),
-            "email": user.get("email", "")
+            "name": name_clean,
+            "email": email_clean
         }
     }
