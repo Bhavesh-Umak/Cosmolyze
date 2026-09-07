@@ -487,8 +487,8 @@
         }
 
         .product-img-fade {
-            opacity: 0;
-            transition: opacity 0.45s ease;
+            opacity: 1;
+            transition: opacity 0.3s ease;
         }
 
         .product-img-fade.is-loaded {
@@ -3352,6 +3352,25 @@
         const SVG_ARROW_UP_RIGHT = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg>`;
         const SVG_SHOPPING_BAG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
 
+        function getInstantProductImage(productName) {
+            const p = String(productName || '').toLowerCase();
+            if (p.includes('cerave')) return 'https://m.media-amazon.com/images/I/61s8B7b4FvL._SL1500_.jpg';
+            if (p.includes('cetaphil')) return 'https://m.media-amazon.com/images/I/61Vd1q1858L._SL1500_.jpg';
+            if (p.includes('minimalist') && (p.includes('salicylic') || p.includes('bha'))) return 'https://m.media-amazon.com/images/I/61D7aW8Y31L._SL1500_.jpg';
+            if (p.includes('minimalist')) return 'https://m.media-amazon.com/images/I/61u3y8uLp-L._SL1500_.jpg';
+            if (p.includes('ordinary') && (p.includes('aha') || p.includes('peeling'))) return 'https://m.media-amazon.com/images/I/51r265vU28L._SL1200_.jpg';
+            if (p.includes('ordinary')) return 'https://m.media-amazon.com/images/I/61A3zUuK7cL._SL1500_.jpg';
+            if (p.includes('roche') || p.includes('cicaplast')) return 'https://m.media-amazon.com/images/I/61qGz9k2E0L._SL1500_.jpg';
+            if (p.includes('neutrogena')) return 'https://m.media-amazon.com/images/I/61YhT224kAL._SL1500_.jpg';
+            if (p.includes('derma co') || p.includes('dermaco')) return 'https://m.media-amazon.com/images/I/51qB7gV-06L._SL1200_.jpg';
+            if (p.includes('cosrx')) return 'https://m.media-amazon.com/images/I/61u5Tf2m8pL._SL1500_.jpg';
+            if (p.includes('dot & key') || p.includes('dot and key')) return 'https://m.media-amazon.com/images/I/61nN3YJ5GzL._SL1500_.jpg';
+            if (p.includes('dr. sheth') || p.includes('sheth')) return 'https://m.media-amazon.com/images/I/61mN67e6u3L._SL1500_.jpg';
+            if (p.includes('plum')) return 'https://m.media-amazon.com/images/I/61z9p5k4f4L._SL1500_.jpg';
+            if (p.includes('bioderma')) return 'https://m.media-amazon.com/images/I/61p-E2h8L-L._SL1500_.jpg';
+            return FALLBACK_PRODUCT_IMAGE;
+        }
+
         // Last rendered verdict — used by bookmark / shelf save
         let lastVerdictData = null;
 
@@ -3362,6 +3381,7 @@
             const winnerEl = document.getElementById('winner-card');
             const altGrid = document.getElementById('alternatives-grid');
             const altSection = document.getElementById('alternatives-section');
+            const winnerImgSrc = w.imageUrl || getInstantProductImage(w.product_name);
 
             // ── Winner Card ─────────────────────────────────────────────────
             winnerEl.innerHTML = `
@@ -3373,11 +3393,11 @@
                     🏆 #1 Top Match for You
                   </div>
                   <div id="winner-product-frame"
-                    class="w-48 h-64 flex items-center justify-center bg-surface-container rounded-lg my-4 border border-outline-variant/20 overflow-hidden shimmer-loading">
+                    class="w-48 h-64 flex items-center justify-center bg-surface-container rounded-lg my-4 border border-outline-variant/20 overflow-hidden shadow-inner">
                     <img id="winner-product-img"
-                      src=""
+                      src="${escHtml(winnerImgSrc)}"
                       alt="${escHtml(w.product_name || 'Product')}"
-                      class="w-full h-full object-contain p-2 product-img-fade"
+                      class="w-full h-full object-contain p-2 product-img-fade is-loaded"
                       onerror="handleImgError(this)" />
                   </div>
                   <div class="flex items-center gap-2 bg-[#d4e6e5] text-[#0e1e1e] px-4 py-2 rounded-full font-semibold text-sm mt-2">
@@ -3440,6 +3460,7 @@
             // ── Alternative Cards ────────────────────────────────────────────
             altGrid.innerHTML = '';
             (alts || []).forEach((alt, i) => {
+                const altImgSrc = alt.imageUrl || getInstantProductImage(alt.product_name);
                 const riskLevel = alt.riskLevel || (
                     alt.match_status === 'avoid' ? 'High Irritation Risk'
                         : alt.match_status === 'neutral' ? 'Moderate Risk'
@@ -3466,11 +3487,11 @@
                 card.innerHTML = `
                   <div class="min-w-0 overflow-hidden">
                     <div id="alt-product-frame-${i}"
-                      class="h-36 bg-slate-50 flex items-center justify-center p-4 overflow-hidden shimmer-loading">
+                      class="h-36 bg-slate-50 flex items-center justify-center p-4 overflow-hidden">
                       <img id="alt-product-img-${i}"
-                        src=""
+                        src="${escHtml(altImgSrc)}"
                         alt="${escHtml(alt.product_name || 'Product')}"
-                        class="h-full w-full object-contain product-img-fade"
+                        class="h-full w-full object-contain product-img-fade is-loaded"
                         onerror="handleImgError(this)" />
                     </div>
                     <div class="p-4 space-y-2 min-w-0">
